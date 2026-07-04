@@ -29,6 +29,8 @@ pub enum Mode {
     Normal,
     Command,
     Filter,
+    CreateName,
+    ConfirmDelete,
 }
 
 pub struct App {
@@ -46,6 +48,8 @@ pub struct App {
     pub help_visible: bool,
     pub should_quit: bool,
     pub status_message: Option<String>,
+    create_kind: Option<ResourceKind>,
+    pending_delete: Option<(ResourceKind, Option<String>, String)>,
     last_data_tick: Instant,
     last_log_tick: Instant,
 }
@@ -71,6 +75,8 @@ impl App {
             help_visible: false,
             should_quit: false,
             status_message: None,
+            create_kind: None,
+            pending_delete: None,
             last_data_tick: Instant::now(),
             last_log_tick: Instant::now(),
         }
@@ -149,7 +155,58 @@ impl App {
         match self.mode {
             Mode::Command => self.on_key_command(key),
             Mode::Filter => self.on_key_filter(key),
+            Mode::CreateName => self.on_key_create(key),
+            Mode::ConfirmDelete => self.on_key_confirm_delete(key),
             Mode::Normal => self.on_key_normal(key),
+        }
+    }
+
+    fn on_key_create(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
+                self.input.clear();
+                self.create_kind = None;
+            }
+            KeyCode::Enter => {
+                if let Some(kind) = self.create_kind.take() {
+                    let ns = self.namespace_filter.clone().unwrap_or_else(|| "default".to_string());
+                    let name = self.input.trim().to_string();
+                    match self.backend.create_default(kind, Some(&ns), &name) {
+                        Ok(()) => self.status_message = Some(format!("created {} '{}'", kind.title(), name)),
+                        Err(e) => self.status_message = Some(format!("error: {e}")),
+                    }
+                }
+                self.mode = Mode::Normal;
+                self.input.clear();
+            }
+            KeyCode::Backspace => {
+                self.input.pop();
+            }
+            KeyCode::Char(c) => self.input.push(c),
+            _ => {}
+        }
+    }
+
+    fn on_key_confirm_delete(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some((kind, namespace, name)) = self.pending_delete.take() {
+                    match self.backend.delete(kind, namespace.as_deref(), &name) {
+                        Ok(()) => {
+                            self.status_message = Some(format!("deleted {} '{}'", kind.title(), name));
+                            self.move_selection(0);
+                        }
+                        Err(e) => self.status_message = Some(format!("error: {e}")),
+                    }
+                }
+                self.mode = Mode::Normal;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                self.pending_delete = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
         }
     }
 
@@ -251,9 +308,11 @@ impl App {
             KeyCode::PageUp => self.move_selection(-10),
             KeyCode::Char('g') => self.select_index(0),
             KeyCode::Char('G') => self.select_last(),
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => self.start_create(),
             KeyCode::Char('n') => self.cycle_namespace(),
             KeyCode::Char('[') => self.cycle_kind(-1),
             KeyCode::Char(']') => self.cycle_kind(1),
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.start_delete_confirm(),
             KeyCode::Enter | KeyCode::Char('d') => self.drill_in(),
             KeyCode::Char('l') => self.open_logs(),
             _ => {}
@@ -373,6 +432,34 @@ impl App {
             self.last_log_tick = Instant::now();
             self.push_view(View::Logs { namespace, pod });
         }
+    }
+
+    fn start_create(&mut self) {
+        let View::Table(kind) = self.current_view() else { return };
+        if !kind.creatable() {
+            self.status_message = Some(format!("{} can't be created here", kind.title()));
+            return;
+        }
+        self.create_kind = Some(kind);
+        self.input.clear();
+        self.mode = Mode::CreateName;
+    }
+
+    fn start_delete_confirm(&mut self) {
+        let View::Table(kind) = self.current_view() else { return };
+        let rows = self.visible_rows(kind);
+        if let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) {
+            self.pending_delete = Some((kind, row.namespace.clone(), row.name.clone()));
+            self.mode = Mode::ConfirmDelete;
+        }
+    }
+
+    pub fn create_kind(&self) -> Option<ResourceKind> {
+        self.create_kind
+    }
+
+    pub fn pending_delete_name(&self) -> Option<&str> {
+        self.pending_delete.as_ref().map(|(_, _, name)| name.as_str())
     }
 
     pub fn namespace_label(&self) -> &str {

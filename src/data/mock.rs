@@ -506,6 +506,291 @@ impl MockBackend {
         }
     }
 
+    /// Scaffolds a new mock resource with sensible defaults. Only supports
+    /// the kinds `ResourceKind::creatable()` allows.
+    pub fn create_default(
+        &mut self,
+        kind: ResourceKind,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("name cannot be empty".to_string());
+        }
+        if !kind.creatable() {
+            return Err(format!("{} can't be created here", kind.title()));
+        }
+        if kind.namespaced() && namespace.is_none() {
+            return Err("namespace required (press n to pick one first)".to_string());
+        }
+
+        let mut rng = rand::thread_rng();
+        let ready_node = self
+            .cur()
+            .nodes
+            .iter()
+            .find(|n| n.status == NodeStatus::Ready)
+            .map(|n| n.name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let d = &mut self.data[self.active];
+
+        match kind {
+            ResourceKind::Namespaces => {
+                if d.namespaces.iter().any(|n| n.name == name) {
+                    return Err(format!("namespace '{name}' already exists"));
+                }
+                d.namespaces.push(NamespaceInfo {
+                    name: name.to_string(),
+                    status: "Active",
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Pods => {
+                let ns = namespace.unwrap();
+                if d.pods.iter().any(|p| p.namespace == ns && p.name == name) {
+                    return Err(format!("pod '{name}' already exists in {ns}"));
+                }
+                d.pods.push(PodInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    ready: (0, 1),
+                    phase: PodPhase::ContainerCreating,
+                    restarts: 0,
+                    cpu_millicores: rng.gen_range(5..50),
+                    mem_mib: rng.gen_range(16..128),
+                    node: ready_node,
+                    ip: fake_ip(&mut rng),
+                    containers: vec![name.to_string()],
+                    owner: "<none>".to_string(),
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Deployments => {
+                let ns = namespace.unwrap();
+                if d.deployments.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("deployment '{name}' already exists in {ns}"));
+                }
+                let rs_name = format!("{}-{}", name, hash(&mut rng, 10));
+                d.replicasets.push(ReplicaSetInfo {
+                    name: rs_name.clone(),
+                    namespace: ns.to_string(),
+                    owner_deployment: name.to_string(),
+                    desired: 1,
+                    current: 1,
+                    ready: 0,
+                    age_secs: 0,
+                });
+                d.pods.push(PodInfo {
+                    name: format!("{}-{}", rs_name, hash(&mut rng, 5)),
+                    namespace: ns.to_string(),
+                    ready: (0, 1),
+                    phase: PodPhase::ContainerCreating,
+                    restarts: 0,
+                    cpu_millicores: rng.gen_range(5..50),
+                    mem_mib: rng.gen_range(16..128),
+                    node: ready_node,
+                    ip: fake_ip(&mut rng),
+                    containers: vec![name.to_string()],
+                    owner: format!("ReplicaSet/{rs_name}"),
+                    age_secs: 0,
+                });
+                d.deployments.push(DeploymentInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    ready: (0, 1),
+                    up_to_date: 1,
+                    available: 0,
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::StatefulSets => {
+                let ns = namespace.unwrap();
+                if d.statefulsets.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("statefulset '{name}' already exists in {ns}"));
+                }
+                d.statefulsets.push(StatefulSetInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    ready: (0, 1),
+                    age_secs: 0,
+                });
+                d.pods.push(PodInfo {
+                    name: format!("{name}-0"),
+                    namespace: ns.to_string(),
+                    ready: (0, 1),
+                    phase: PodPhase::ContainerCreating,
+                    restarts: 0,
+                    cpu_millicores: rng.gen_range(5..50),
+                    mem_mib: rng.gen_range(16..128),
+                    node: ready_node,
+                    ip: fake_ip(&mut rng),
+                    containers: vec![name.to_string()],
+                    owner: format!("StatefulSet/{name}"),
+                    age_secs: 0,
+                });
+                d.pvcs.push(PvcInfo {
+                    name: format!("{name}-data-0"),
+                    namespace: ns.to_string(),
+                    status: "Bound",
+                    volume: format!("pvc-{}", hash(&mut rng, 12)),
+                    capacity: "1Gi".to_string(),
+                    storage_class: "standard".to_string(),
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Services => {
+                let ns = namespace.unwrap();
+                if d.services.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("service '{name}' already exists in {ns}"));
+                }
+                d.services.push(ServiceInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    svc_type: ServiceType::ClusterIP,
+                    cluster_ip: fake_svc_ip(&mut rng),
+                    external_ip: "<none>".to_string(),
+                    ports: "80/TCP".to_string(),
+                    selector: format!("app={name}"),
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Ingresses => {
+                let ns = namespace.unwrap();
+                if d.ingresses.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("ingress '{name}' already exists in {ns}"));
+                }
+                d.ingresses.push(IngressInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    class: "nginx".to_string(),
+                    hosts: format!("{name}.local"),
+                    address: "<pending>".to_string(),
+                    ports: "80".to_string(),
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::ConfigMaps => {
+                let ns = namespace.unwrap();
+                if d.configmaps.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("configmap '{name}' already exists in {ns}"));
+                }
+                d.configmaps.push(ConfigMapInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    data_count: 0,
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Secrets => {
+                let ns = namespace.unwrap();
+                if d.secrets.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("secret '{name}' already exists in {ns}"));
+                }
+                d.secrets.push(SecretInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    secret_type: "Opaque".to_string(),
+                    data_count: 0,
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::Pvcs => {
+                let ns = namespace.unwrap();
+                if d.pvcs.iter().any(|x| x.namespace == ns && x.name == name) {
+                    return Err(format!("pvc '{name}' already exists in {ns}"));
+                }
+                d.pvcs.push(PvcInfo {
+                    name: name.to_string(),
+                    namespace: ns.to_string(),
+                    status: "Bound",
+                    volume: format!("pvc-{}", hash(&mut rng, 12)),
+                    capacity: "1Gi".to_string(),
+                    storage_class: "standard".to_string(),
+                    age_secs: 0,
+                });
+            }
+            ResourceKind::ReplicaSets | ResourceKind::Nodes | ResourceKind::Events => {
+                unreachable!("creatable() excludes this kind")
+            }
+        }
+        Ok(())
+    }
+
+    /// Removes a resource from the mock cluster. Works for any kind so the
+    /// UI can offer a consistent "delete selected row" action everywhere.
+    pub fn delete(&mut self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> Result<(), String> {
+        let d = &mut self.data[self.active];
+        let ns_match = |ns: &str| namespace.map(|n| n == ns).unwrap_or(true);
+        let found = match kind {
+            ResourceKind::Pods => {
+                let before = d.pods.len();
+                d.pods.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.pods.len() != before
+            }
+            ResourceKind::Deployments => {
+                let before = d.deployments.len();
+                d.deployments.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.deployments.len() != before
+            }
+            ResourceKind::ReplicaSets => {
+                let before = d.replicasets.len();
+                d.replicasets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.replicasets.len() != before
+            }
+            ResourceKind::StatefulSets => {
+                let before = d.statefulsets.len();
+                d.statefulsets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.statefulsets.len() != before
+            }
+            ResourceKind::Services => {
+                let before = d.services.len();
+                d.services.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.services.len() != before
+            }
+            ResourceKind::Ingresses => {
+                let before = d.ingresses.len();
+                d.ingresses.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.ingresses.len() != before
+            }
+            ResourceKind::Nodes => {
+                let before = d.nodes.len();
+                d.nodes.retain(|x| x.name != name);
+                d.nodes.len() != before
+            }
+            ResourceKind::Namespaces => {
+                let before = d.namespaces.len();
+                d.namespaces.retain(|x| x.name != name);
+                d.namespaces.len() != before
+            }
+            ResourceKind::ConfigMaps => {
+                let before = d.configmaps.len();
+                d.configmaps.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.configmaps.len() != before
+            }
+            ResourceKind::Secrets => {
+                let before = d.secrets.len();
+                d.secrets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.secrets.len() != before
+            }
+            ResourceKind::Events => {
+                let before = d.events.len();
+                d.events.retain(|x| !(ns_match(&x.namespace) && x.object == name));
+                d.events.len() != before
+            }
+            ResourceKind::Pvcs => {
+                let before = d.pvcs.len();
+                d.pvcs.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.pvcs.len() != before
+            }
+        };
+        if found {
+            Ok(())
+        } else {
+            Err(format!("{name} not found"))
+        }
+    }
+
     pub fn describe(&self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> String {
         let d = self.cur();
         match kind {

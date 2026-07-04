@@ -83,6 +83,24 @@ impl ResourceKind {
         )
     }
 
+    /// Kinds the `Ctrl+N` quick-create flow knows how to scaffold. Excludes
+    /// controller-managed kinds (ReplicaSets), infra-level kinds (Nodes),
+    /// and system-generated kinds (Events).
+    pub fn creatable(self) -> bool {
+        matches!(
+            self,
+            ResourceKind::Pods
+                | ResourceKind::Deployments
+                | ResourceKind::StatefulSets
+                | ResourceKind::Services
+                | ResourceKind::Ingresses
+                | ResourceKind::ConfigMaps
+                | ResourceKind::Secrets
+                | ResourceKind::Namespaces
+                | ResourceKind::Pvcs
+        )
+    }
+
     pub fn columns(self) -> &'static [&'static str] {
         match self {
             ResourceKind::Pods => &[

@@ -17,6 +17,20 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let line0 = match app.mode {
         Mode::Command => Line::from(Span::styled(format!(":{}", app.input), theme::command_bar())),
         Mode::Filter => Line::from(Span::styled(format!("/{}", app.input), theme::command_bar())),
+        Mode::CreateName => {
+            let kind = app.create_kind().map(|k| k.title()).unwrap_or("resource");
+            Line::from(Span::styled(
+                format!("new {kind} name: {}", app.input),
+                theme::command_bar(),
+            ))
+        }
+        Mode::ConfirmDelete => {
+            let name = app.pending_delete_name().unwrap_or("");
+            Line::from(Span::styled(
+                format!("delete '{name}'? y/n"),
+                Style::default().fg(theme::BAD),
+            ))
+        }
         Mode::Normal => match &app.status_message {
             Some(msg) => Line::from(Span::styled(msg.clone(), Style::default().fg(theme::WARN))),
             None => Line::default(),
@@ -51,6 +65,10 @@ fn hints_for(app: &App) -> Vec<(&'static str, &'static str)> {
             if kind.namespaced() {
                 v.push(("n", "namespace"));
             }
+            if kind.creatable() {
+                v.push(("ctrl+n", "create"));
+            }
+            v.push(("ctrl+d", "delete"));
             v.push(("[ ]", "kind"));
             v.push(("c", "clusters"));
             v.push(("esc", "back"));
