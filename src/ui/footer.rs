@@ -31,6 +31,13 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(theme::BAD),
             ))
         }
+        Mode::Edit => {
+            let (kind, name) = app.edit_target_info().unwrap_or((ResourceKind::Pods, ""));
+            Line::from(Span::styled(
+                format!("edit {} '{}' {}: {}", kind.title(), name, kind.edit_field_label(), app.input),
+                theme::command_bar(),
+            ))
+        }
         Mode::Normal => match &app.status_message {
             Some(msg) => Line::from(Span::styled(msg.clone(), Style::default().fg(theme::WARN))),
             None => Line::default(),
@@ -67,6 +74,9 @@ fn hints_for(app: &App) -> Vec<(&'static str, &'static str)> {
             }
             if kind.creatable() {
                 v.push(("ctrl+n", "create"));
+            }
+            if kind.editable() {
+                v.push(("e", "edit"));
             }
             v.push(("ctrl+d", "delete"));
             v.push(("[ ]", "kind"));

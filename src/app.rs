@@ -31,6 +31,7 @@ pub enum Mode {
     Filter,
     CreateName,
     ConfirmDelete,
+    Edit,
 }
 
 pub struct App {
@@ -50,6 +51,7 @@ pub struct App {
     pub status_message: Option<String>,
     create_kind: Option<ResourceKind>,
     pending_delete: Option<(ResourceKind, Option<String>, String)>,
+    edit_target: Option<(ResourceKind, Option<String>, String)>,
     last_data_tick: Instant,
     last_log_tick: Instant,
 }
@@ -77,6 +79,7 @@ impl App {
             status_message: None,
             create_kind: None,
             pending_delete: None,
+            edit_target: None,
             last_data_tick: Instant::now(),
             last_log_tick: Instant::now(),
         }
@@ -157,7 +160,37 @@ impl App {
             Mode::Filter => self.on_key_filter(key),
             Mode::CreateName => self.on_key_create(key),
             Mode::ConfirmDelete => self.on_key_confirm_delete(key),
+            Mode::Edit => self.on_key_edit(key),
             Mode::Normal => self.on_key_normal(key),
+        }
+    }
+
+    fn on_key_edit(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
+                self.input.clear();
+                self.edit_target = None;
+            }
+            KeyCode::Enter => {
+                if let Some((kind, namespace, name)) = self.edit_target.take() {
+                    let value = self.input.clone();
+                    match self.backend.apply_edit(kind, namespace.as_deref(), &name, &value) {
+                        Ok(()) => {
+                            self.status_message =
+                                Some(format!("updated {} '{}' {}", kind.title(), name, kind.edit_field_label()))
+                        }
+                        Err(e) => self.status_message = Some(format!("error: {e}")),
+                    }
+                }
+                self.mode = Mode::Normal;
+                self.input.clear();
+            }
+            KeyCode::Backspace => {
+                self.input.pop();
+            }
+            KeyCode::Char(c) => self.input.push(c),
+            _ => {}
         }
     }
 
@@ -315,6 +348,7 @@ impl App {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.start_delete_confirm(),
             KeyCode::Enter | KeyCode::Char('d') => self.drill_in(),
             KeyCode::Char('l') => self.open_logs(),
+            KeyCode::Char('e') => self.start_edit(),
             _ => {}
         }
     }
@@ -454,12 +488,33 @@ impl App {
         }
     }
 
+    fn start_edit(&mut self) {
+        let View::Table(kind) = self.current_view() else { return };
+        if !kind.editable() {
+            self.status_message = Some(format!("{} can't be edited here", kind.title()));
+            return;
+        }
+        let rows = self.visible_rows(kind);
+        let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) else { return };
+        let current = self
+            .backend
+            .current_edit_value(kind, row.namespace.as_deref(), &row.name)
+            .unwrap_or_default();
+        self.edit_target = Some((kind, row.namespace.clone(), row.name.clone()));
+        self.input = current;
+        self.mode = Mode::Edit;
+    }
+
     pub fn create_kind(&self) -> Option<ResourceKind> {
         self.create_kind
     }
 
     pub fn pending_delete_name(&self) -> Option<&str> {
         self.pending_delete.as_ref().map(|(_, _, name)| name.as_str())
+    }
+
+    pub fn edit_target_info(&self) -> Option<(ResourceKind, &str)> {
+        self.edit_target.as_ref().map(|(kind, _, name)| (*kind, name.as_str()))
     }
 
     pub fn namespace_label(&self) -> &str {

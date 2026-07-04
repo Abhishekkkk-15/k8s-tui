@@ -101,6 +101,35 @@ impl ResourceKind {
         )
     }
 
+    /// Kinds the `e` quick-edit flow supports, each mapped to the one field
+    /// most worth tweaking live (mirrors `kubectl scale`/`kubectl edit` for
+    /// the common case rather than a full multi-field form).
+    pub fn editable(self) -> bool {
+        matches!(
+            self,
+            ResourceKind::Deployments
+                | ResourceKind::StatefulSets
+                | ResourceKind::Services
+                | ResourceKind::Ingresses
+                | ResourceKind::ConfigMaps
+                | ResourceKind::Secrets
+                | ResourceKind::Pvcs
+        )
+    }
+
+    /// Label for the single field `e` edits on this kind. Only meaningful
+    /// when `editable()` is true.
+    pub fn edit_field_label(self) -> &'static str {
+        match self {
+            ResourceKind::Deployments | ResourceKind::StatefulSets => "replicas",
+            ResourceKind::Services => "ports",
+            ResourceKind::Ingresses => "hosts",
+            ResourceKind::ConfigMaps | ResourceKind::Secrets => "data keys",
+            ResourceKind::Pvcs => "capacity",
+            _ => "",
+        }
+    }
+
     pub fn columns(self) -> &'static [&'static str] {
         match self {
             ResourceKind::Pods => &[

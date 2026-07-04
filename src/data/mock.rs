@@ -791,6 +791,254 @@ impl MockBackend {
         }
     }
 
+    /// Current value of the single field `ResourceKind::editable()` exposes
+    /// for quick-editing, used to prefill the edit prompt.
+    pub fn current_edit_value(&self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> Option<String> {
+        let d = self.cur();
+        match kind {
+            ResourceKind::Deployments => d
+                .deployments
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.ready.1.to_string()),
+            ResourceKind::StatefulSets => d
+                .statefulsets
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.ready.1.to_string()),
+            ResourceKind::Services => d
+                .services
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.ports.clone()),
+            ResourceKind::Ingresses => d
+                .ingresses
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.hosts.clone()),
+            ResourceKind::ConfigMaps => d
+                .configmaps
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.data_count.to_string()),
+            ResourceKind::Secrets => d
+                .secrets
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.data_count.to_string()),
+            ResourceKind::Pvcs => d
+                .pvcs
+                .iter()
+                .find(|x| Some(x.namespace.as_str()) == namespace && x.name == name)
+                .map(|x| x.capacity.clone()),
+            _ => None,
+        }
+    }
+
+    /// Applies an edit produced by the quick-edit flow. Only supports the
+    /// kinds `ResourceKind::editable()` allows.
+    pub fn apply_edit(
+        &mut self,
+        kind: ResourceKind,
+        namespace: Option<&str>,
+        name: &str,
+        value: &str,
+    ) -> Result<(), String> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err("value cannot be empty".to_string());
+        }
+        match kind {
+            ResourceKind::Deployments => self.scale_deployment(namespace, name, value),
+            ResourceKind::StatefulSets => self.scale_statefulset(namespace, name, value),
+            ResourceKind::Services => {
+                let ns = namespace.ok_or("namespace required")?;
+                let d = &mut self.data[self.active];
+                let svc = d
+                    .services
+                    .iter_mut()
+                    .find(|x| x.namespace == ns && x.name == name)
+                    .ok_or_else(|| format!("service '{name}' not found"))?;
+                svc.ports = value.to_string();
+                Ok(())
+            }
+            ResourceKind::Ingresses => {
+                let ns = namespace.ok_or("namespace required")?;
+                let d = &mut self.data[self.active];
+                let ing = d
+                    .ingresses
+                    .iter_mut()
+                    .find(|x| x.namespace == ns && x.name == name)
+                    .ok_or_else(|| format!("ingress '{name}' not found"))?;
+                ing.hosts = value.to_string();
+                Ok(())
+            }
+            ResourceKind::ConfigMaps => {
+                let ns = namespace.ok_or("namespace required")?;
+                let count: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+                let d = &mut self.data[self.active];
+                let cm = d
+                    .configmaps
+                    .iter_mut()
+                    .find(|x| x.namespace == ns && x.name == name)
+                    .ok_or_else(|| format!("configmap '{name}' not found"))?;
+                cm.data_count = count;
+                Ok(())
+            }
+            ResourceKind::Secrets => {
+                let ns = namespace.ok_or("namespace required")?;
+                let count: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+                let d = &mut self.data[self.active];
+                let secret = d
+                    .secrets
+                    .iter_mut()
+                    .find(|x| x.namespace == ns && x.name == name)
+                    .ok_or_else(|| format!("secret '{name}' not found"))?;
+                secret.data_count = count;
+                Ok(())
+            }
+            ResourceKind::Pvcs => {
+                let ns = namespace.ok_or("namespace required")?;
+                let d = &mut self.data[self.active];
+                let pvc = d
+                    .pvcs
+                    .iter_mut()
+                    .find(|x| x.namespace == ns && x.name == name)
+                    .ok_or_else(|| format!("pvc '{name}' not found"))?;
+                pvc.capacity = value.to_string();
+                Ok(())
+            }
+            _ => Err(format!("{} can't be edited here", kind.title())),
+        }
+    }
+
+    fn scale_deployment(&mut self, namespace: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+        let ns = namespace.ok_or("namespace required")?.to_string();
+        let new_replicas: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+        if new_replicas > 50 {
+            return Err("replica count too large (max 50)".to_string());
+        }
+
+        let mut rng = rand::thread_rng();
+        let ready_node = self
+            .cur()
+            .nodes
+            .iter()
+            .find(|n| n.status == NodeStatus::Ready)
+            .map(|n| n.name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let d = &mut self.data[self.active];
+
+        let dep = d
+            .deployments
+            .iter_mut()
+            .find(|x| x.namespace == ns && x.name == name)
+            .ok_or_else(|| format!("deployment '{name}' not found"))?;
+        let old_desired = dep.ready.1;
+        dep.ready.1 = new_replicas;
+        dep.ready.0 = dep.ready.0.min(new_replicas);
+        dep.up_to_date = new_replicas;
+        dep.available = dep.available.min(new_replicas);
+
+        let rs = d
+            .replicasets
+            .iter_mut()
+            .find(|x| x.namespace == ns && x.owner_deployment == name)
+            .ok_or_else(|| format!("no ReplicaSet found for '{name}'"))?;
+        rs.desired = new_replicas;
+        rs.current = new_replicas;
+        rs.ready = rs.ready.min(new_replicas);
+        let rs_name = rs.name.clone();
+        let owner_tag = format!("ReplicaSet/{rs_name}");
+
+        if new_replicas > old_desired {
+            for _ in 0..(new_replicas - old_desired) {
+                d.pods.push(PodInfo {
+                    name: format!("{}-{}", rs_name, hash(&mut rng, 5)),
+                    namespace: ns.clone(),
+                    ready: (0, 1),
+                    phase: PodPhase::ContainerCreating,
+                    restarts: 0,
+                    cpu_millicores: rng.gen_range(5..50),
+                    mem_mib: rng.gen_range(16..128),
+                    node: ready_node.clone(),
+                    ip: fake_ip(&mut rng),
+                    containers: vec![name.to_string()],
+                    owner: owner_tag.clone(),
+                    age_secs: 0,
+                });
+            }
+        } else if new_replicas < old_desired {
+            let mut candidates: Vec<usize> = d
+                .pods
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.namespace == ns && p.owner == owner_tag)
+                .map(|(i, _)| i)
+                .collect();
+            candidates.sort_by_key(|&i| matches!(d.pods[i].phase, PodPhase::Running));
+            let to_remove = (old_desired - new_replicas) as usize;
+            let mut to_delete: Vec<usize> = candidates.into_iter().take(to_remove).collect();
+            to_delete.sort_unstable_by(|a, b| b.cmp(a));
+            for i in to_delete {
+                d.pods.remove(i);
+            }
+        }
+        Ok(())
+    }
+
+    fn scale_statefulset(&mut self, namespace: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+        let ns = namespace.ok_or("namespace required")?.to_string();
+        let new_replicas: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+        if new_replicas > 50 {
+            return Err("replica count too large (max 50)".to_string());
+        }
+
+        let mut rng = rand::thread_rng();
+        let ready_node = self
+            .cur()
+            .nodes
+            .iter()
+            .find(|n| n.status == NodeStatus::Ready)
+            .map(|n| n.name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let d = &mut self.data[self.active];
+
+        let sts = d
+            .statefulsets
+            .iter_mut()
+            .find(|x| x.namespace == ns && x.name == name)
+            .ok_or_else(|| format!("statefulset '{name}' not found"))?;
+        let old_desired = sts.ready.1;
+        sts.ready.1 = new_replicas;
+        sts.ready.0 = sts.ready.0.min(new_replicas);
+
+        if new_replicas > old_desired {
+            for i in old_desired..new_replicas {
+                d.pods.push(PodInfo {
+                    name: format!("{name}-{i}"),
+                    namespace: ns.clone(),
+                    ready: (0, 1),
+                    phase: PodPhase::ContainerCreating,
+                    restarts: 0,
+                    cpu_millicores: rng.gen_range(20..250),
+                    mem_mib: rng.gen_range(64..700),
+                    node: ready_node.clone(),
+                    ip: fake_ip(&mut rng),
+                    containers: vec![name.to_string()],
+                    owner: format!("StatefulSet/{name}"),
+                    age_secs: 0,
+                });
+            }
+        } else if new_replicas < old_desired {
+            for i in new_replicas..old_desired {
+                let target = format!("{name}-{i}");
+                d.pods.retain(|p| !(p.namespace == ns && p.name == target));
+            }
+        }
+        Ok(())
+    }
+
     pub fn describe(&self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> String {
         let d = self.cur();
         match kind {
