@@ -3,7 +3,10 @@ use std::time::{Duration, Instant};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::{ListState, TableState};
 
-use crate::data::{MockBackend, ResourceKind, ResourceRow};
+use crate::{
+    daemon::daemon::Daemon,
+    data::{MockBackend, ResourceKind, ResourceRow},
+};
 
 const DATA_TICK: Duration = Duration::from_secs(2);
 const LOG_TICK: Duration = Duration::from_millis(450);
@@ -36,6 +39,7 @@ pub enum Mode {
 
 pub struct App {
     pub backend: MockBackend,
+    pub daemon: Daemon,
     pub view_stack: Vec<View>,
     pub mode: Mode,
     pub input: String,
@@ -57,13 +61,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(daemon: Daemon) -> Self {
         let mut cluster_state = ListState::default();
         cluster_state.select(Some(0));
         let mut table_state = TableState::default();
         table_state.select(Some(0));
         App {
             backend: MockBackend::new(),
+            daemon,
             view_stack: vec![View::Clusters],
             mode: Mode::Normal,
             input: String::new(),
@@ -124,7 +129,11 @@ impl App {
         let mut rows = self.backend.rows(kind, ns);
         if !self.filter.is_empty() {
             let needle = self.filter.to_ascii_lowercase();
-            rows.retain(|r| r.cells.iter().any(|c| c.to_ascii_lowercase().contains(&needle)));
+            rows.retain(|r| {
+                r.cells
+                    .iter()
+                    .any(|c| c.to_ascii_lowercase().contains(&needle))
+            });
         }
         rows
     }
@@ -138,7 +147,9 @@ impl App {
         if let View::Logs { .. } = self.current_view() {
             if now.duration_since(self.last_log_tick) >= LOG_TICK {
                 self.log_seq += 1;
-                let line = self.backend.next_log_line(&self.log_container, self.log_seq);
+                let line = self
+                    .backend
+                    .next_log_line(&self.log_container, self.log_seq);
                 self.log_lines.push(line);
                 if self.log_lines.len() > 500 {
                     let excess = self.log_lines.len() - 500;
@@ -175,10 +186,17 @@ impl App {
             KeyCode::Enter => {
                 if let Some((kind, namespace, name)) = self.edit_target.take() {
                     let value = self.input.clone();
-                    match self.backend.apply_edit(kind, namespace.as_deref(), &name, &value) {
+                    match self
+                        .backend
+                        .apply_edit(kind, namespace.as_deref(), &name, &value)
+                    {
                         Ok(()) => {
-                            self.status_message =
-                                Some(format!("updated {} '{}' {}", kind.title(), name, kind.edit_field_label()))
+                            self.status_message = Some(format!(
+                                "updated {} '{}' {}",
+                                kind.title(),
+                                name,
+                                kind.edit_field_label()
+                            ))
                         }
                         Err(e) => self.status_message = Some(format!("error: {e}")),
                     }
@@ -203,10 +221,16 @@ impl App {
             }
             KeyCode::Enter => {
                 if let Some(kind) = self.create_kind.take() {
-                    let ns = self.namespace_filter.clone().unwrap_or_else(|| "default".to_string());
+                    let ns = self
+                        .namespace_filter
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string());
                     let name = self.input.trim().to_string();
                     match self.backend.create_default(kind, Some(&ns), &name) {
-                        Ok(()) => self.status_message = Some(format!("created {} '{}'", kind.title(), name)),
+                        Ok(()) => {
+                            self.status_message =
+                                Some(format!("created {} '{}'", kind.title(), name))
+                        }
                         Err(e) => self.status_message = Some(format!("error: {e}")),
                     }
                 }
@@ -227,7 +251,8 @@ impl App {
                 if let Some((kind, namespace, name)) = self.pending_delete.take() {
                     match self.backend.delete(kind, namespace.as_deref(), &name) {
                         Ok(()) => {
-                            self.status_message = Some(format!("deleted {} '{}'", kind.title(), name));
+                            self.status_message =
+                                Some(format!("deleted {} '{}'", kind.title(), name));
                             self.move_selection(0);
                         }
                         Err(e) => self.status_message = Some(format!("error: {e}")),
@@ -306,7 +331,10 @@ impl App {
 
     fn on_key_normal(&mut self, key: KeyEvent) {
         if self.help_visible {
-            if matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q')) {
+            if matches!(
+                key.code,
+                KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q')
+            ) {
                 self.help_visible = false;
             }
             return;
@@ -341,11 +369,15 @@ impl App {
             KeyCode::PageUp => self.move_selection(-10),
             KeyCode::Char('g') => self.select_index(0),
             KeyCode::Char('G') => self.select_last(),
-            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => self.start_create(),
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.start_create()
+            }
             KeyCode::Char('n') => self.cycle_namespace(),
             KeyCode::Char('[') => self.cycle_kind(-1),
             KeyCode::Char(']') => self.cycle_kind(1),
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.start_delete_confirm(),
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.start_delete_confirm()
+            }
             KeyCode::Enter | KeyCode::Char('d') => self.drill_in(),
             KeyCode::Char('l') => self.open_logs(),
             KeyCode::Char('e') => self.start_edit(),
@@ -394,7 +426,9 @@ impl App {
     }
 
     fn cycle_namespace(&mut self) {
-        let View::Table(kind) = self.current_view() else { return };
+        let View::Table(kind) = self.current_view() else {
+            return;
+        };
         if !kind.namespaced() {
             return;
         }
@@ -420,7 +454,9 @@ impl App {
     }
 
     fn cycle_kind(&mut self, dir: i32) {
-        let View::Table(kind) = self.current_view() else { return };
+        let View::Table(kind) = self.current_view() else {
+            return;
+        };
         let all = ResourceKind::ALL;
         let pos = all.iter().position(|k| *k == kind).unwrap_or(0) as i32;
         let len = all.len() as i32;
@@ -451,7 +487,9 @@ impl App {
     }
 
     fn open_logs(&mut self) {
-        let View::Table(ResourceKind::Pods) = self.current_view() else { return };
+        let View::Table(ResourceKind::Pods) = self.current_view() else {
+            return;
+        };
         let rows = self.visible_rows(ResourceKind::Pods);
         if let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) {
             let namespace = row.namespace.clone().unwrap_or_default();
@@ -469,7 +507,9 @@ impl App {
     }
 
     fn start_create(&mut self) {
-        let View::Table(kind) = self.current_view() else { return };
+        let View::Table(kind) = self.current_view() else {
+            return;
+        };
         if !kind.creatable() {
             self.status_message = Some(format!("{} can't be created here", kind.title()));
             return;
@@ -480,7 +520,9 @@ impl App {
     }
 
     fn start_delete_confirm(&mut self) {
-        let View::Table(kind) = self.current_view() else { return };
+        let View::Table(kind) = self.current_view() else {
+            return;
+        };
         let rows = self.visible_rows(kind);
         if let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) {
             self.pending_delete = Some((kind, row.namespace.clone(), row.name.clone()));
@@ -489,13 +531,17 @@ impl App {
     }
 
     fn start_edit(&mut self) {
-        let View::Table(kind) = self.current_view() else { return };
+        let View::Table(kind) = self.current_view() else {
+            return;
+        };
         if !kind.editable() {
             self.status_message = Some(format!("{} can't be edited here", kind.title()));
             return;
         }
         let rows = self.visible_rows(kind);
-        let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) else { return };
+        let Some(row) = self.table_state.selected().and_then(|i| rows.get(i)) else {
+            return;
+        };
         let current = self
             .backend
             .current_edit_value(kind, row.namespace.as_deref(), &row.name)
@@ -510,11 +556,15 @@ impl App {
     }
 
     pub fn pending_delete_name(&self) -> Option<&str> {
-        self.pending_delete.as_ref().map(|(_, _, name)| name.as_str())
+        self.pending_delete
+            .as_ref()
+            .map(|(_, _, name)| name.as_str())
     }
 
     pub fn edit_target_info(&self) -> Option<(ResourceKind, &str)> {
-        self.edit_target.as_ref().map(|(kind, _, name)| (*kind, name.as_str()))
+        self.edit_target
+            .as_ref()
+            .map(|(kind, _, name)| (*kind, name.as_str()))
     }
 
     pub fn namespace_label(&self) -> &str {

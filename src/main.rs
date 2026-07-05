@@ -1,23 +1,28 @@
 mod app;
+mod daemon;
 mod data;
-mod k8s_client;
 mod theme;
 mod ui;
-
 use std::io::{self, Stdout};
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-use ratatui::backend::CrosstermBackend;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+};
 use ratatui::Terminal;
 
 use app::App;
+use ratatui::prelude::CrosstermBackend;
 
-fn main() -> io::Result<()> {
+use crate::daemon::daemon::Daemon;
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let mut terminal = init_terminal()?;
-    let result = run(&mut terminal);
+    let k8s_client = Daemon::new().await.unwrap();
+
+    let result = run(&mut terminal, k8s_client);
     restore_terminal(&mut terminal)?;
     if let Err(err) = &result {
         eprintln!("error: {err}");
@@ -48,8 +53,8 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Re
     terminal.show_cursor()
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
-    let mut app = App::new();
+fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>, client: Daemon) -> io::Result<()> {
+    let mut app = App::new(client);
 
     while !app.should_quit {
         terminal.draw(|f| ui::draw(f, &mut app))?;
