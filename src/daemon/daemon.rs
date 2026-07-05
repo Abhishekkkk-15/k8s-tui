@@ -2,7 +2,7 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::{Api, Client, api::ListParams};
 
 pub struct Daemon {
-    client: Client,
+    pub client: Client,
 }
 
 impl Daemon {
