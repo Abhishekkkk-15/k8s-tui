@@ -70,7 +70,10 @@ pub fn selected_row() -> Style {
 }
 
 pub fn key_hint() -> Style {
-    Style::default().fg(BG).bg(FG_DIM).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(BG)
+        .bg(FG_DIM)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn command_bar() -> Style {
