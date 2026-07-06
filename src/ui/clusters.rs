@@ -14,7 +14,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 
     let items: Vec<ListItem> = app
         .backend
-        .clusters
+        .clusters()
         .iter()
         .map(|c| {
             let line = Line::from(vec![

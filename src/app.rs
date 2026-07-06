@@ -5,7 +5,7 @@ use ratatui::widgets::{ListState, TableState};
 
 use crate::{
     daemon::daemon::Daemon,
-    data::{MockBackend, ResourceKind, ResourceRow, pod_row},
+    data::{ResourceKind, ResourceRow, pod_row},
 };
 
 const DATA_TICK: Duration = Duration::from_secs(2);
@@ -38,8 +38,7 @@ pub enum Mode {
 }
 
 pub struct App {
-    pub backend: MockBackend,
-    pub daemon: Daemon,
+    pub backend: Daemon,
     pub view_stack: Vec<View>,
     pub mode: Mode,
     pub input: String,
@@ -67,8 +66,7 @@ impl App {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
         App {
-            backend: MockBackend::new(),
-            daemon,
+            backend: daemon,
             view_stack: vec![View::Clusters],
             mode: Mode::Normal,
             input: String::new(),
@@ -127,7 +125,7 @@ impl App {
     pub fn visible_rows(&self, kind: ResourceKind) -> Vec<ResourceRow> {
         let ns = self.namespace_filter.as_deref();
         let mut rows = if kind == ResourceKind::Pods {
-            let mut pods = self.daemon.pods();
+            let mut pods = self.backend.pods();
             if let Some(ns_filter) = ns {
                 pods.retain(|p| p.namespace == ns_filter);
             }
@@ -397,7 +395,7 @@ impl App {
     fn move_selection(&mut self, delta: i32) {
         match self.current_view() {
             View::Clusters => {
-                let len = self.backend.clusters.len();
+                let len = self.backend.clusters().len();
                 let cur = self.cluster_state.selected().unwrap_or(0) as i32;
                 let next = (cur + delta).clamp(0, len.saturating_sub(1) as i32);
                 self.cluster_state.select(Some(next as usize));
@@ -423,7 +421,7 @@ impl App {
     fn select_last(&mut self) {
         match self.current_view() {
             View::Clusters => {
-                let len = self.backend.clusters.len();
+                let len = self.backend.clusters().len();
                 self.cluster_state.select(Some(len.saturating_sub(1)));
             }
             View::Table(kind) => {
@@ -508,6 +506,7 @@ impl App {
                 .pod_by_name(&namespace, &pod)
                 .and_then(|p| p.containers.first().cloned())
                 .unwrap_or_else(|| pod.clone());
+            self.backend.start_log_stream(&namespace, &pod, &self.log_container);
             self.log_lines.clear();
             self.log_seq = 0;
             self.last_log_tick = Instant::now();

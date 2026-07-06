@@ -30,7 +30,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 
     let line2 = match app.current_view() {
         View::Clusters => Line::from(vec![Span::styled(
-            format!("{} clusters available — pick one and press Enter", app.backend.clusters.len()),
+            format!("{} clusters available — pick one and press Enter", app.backend.clusters().len()),
             theme::dim(),
         )]),
         View::Table(kind) => {

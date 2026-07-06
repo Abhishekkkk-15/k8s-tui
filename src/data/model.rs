@@ -474,3 +474,12 @@ pub struct PvcInfo {
     pub storage_class: String,
     pub age_secs: u64,
 }
+
+#[derive(Debug, Clone)]
+pub struct ResourceRow {
+    pub namespace: Option<String>,
+    pub name: String,
+    pub cells: Vec<String>,
+    pub status_col: Option<usize>,
+    pub severity: Severity,
+}

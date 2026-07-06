@@ -25,15 +25,8 @@ async fn main() -> io::Result<()> {
     let daemon_bg = k8s_client.clone();
     tokio::spawn(async move {
         loop {
-            match daemon_bg.fetch_pods().await {
-                Ok(pods) => {
-                    let mut cache = daemon_bg.pod_cache.lock().unwrap();
-
-                    *cache = pods;
-                }
-                Err(e) => {
-                    eprintln!("failed to fetch pods: {e}");
-                }
+            if let Err(e) = daemon_bg.poll_all().await {
+                eprintln!("failed to fetch k8s resources: {e}");
             }
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
