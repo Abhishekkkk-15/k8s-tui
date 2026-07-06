@@ -352,14 +352,31 @@ impl Daemon {
                 let owner = p.metadata.owner_references.as_ref().and_then(|o| o.first()).map(|o| o.name.clone()).unwrap_or_default();
                 let age_secs = get_age_secs(&p.metadata.creation_timestamp);
                 
+                let mut cpu_millicores = 0;
+                let mut mem_mib = 0;
+                if let Some(spec) = &p.spec {
+                    for container in &spec.containers {
+                        if let Some(resources) = &container.resources {
+                            if let Some(requests) = &resources.requests {
+                                if let Some(cpu) = requests.get("cpu") {
+                                    cpu_millicores += parse_cpu_quantity(&cpu.0);
+                                }
+                                if let Some(mem) = requests.get("memory") {
+                                    mem_mib += parse_memory_quantity(&mem.0);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let p_info = PodInfo {
                     name,
                     namespace,
                     ready: (ready_containers, total_containers),
                     phase,
                     restarts,
-                    cpu_millicores: 0,
-                    mem_mib: 0,
+                    cpu_millicores,
+                    mem_mib,
                     node,
                     ip,
                     containers,
@@ -752,4 +769,41 @@ async fn perform_edit(client: &Client, kind: ResourceKind, ns: Option<&str>, nam
         _ => {}
     }
     Ok(())
+}
+
+fn parse_cpu_quantity(q: &str) -> u32 {
+    let q = q.trim();
+    if q.ends_with('m') {
+        q[..q.len() - 1].parse::<u32>().unwrap_or(0)
+    } else {
+        let val = q.parse::<f64>().unwrap_or(0.0);
+        (val * 1000.0) as u32
+    }
+}
+
+fn parse_memory_quantity(q: &str) -> u32 {
+    let q = q.trim();
+    if q.ends_with("Ki") {
+        let val = q[..q.len() - 2].parse::<u64>().unwrap_or(0);
+        (val / 1024) as u32
+    } else if q.ends_with("Mi") {
+        q[..q.len() - 2].parse::<u32>().unwrap_or(0)
+    } else if q.ends_with("Gi") {
+        let val = q[..q.len() - 2].parse::<u32>().unwrap_or(0);
+        val * 1024
+    } else if q.ends_with("Ti") {
+        let val = q[..q.len() - 2].parse::<u32>().unwrap_or(0);
+        val * 1024 * 1024
+    } else if q.ends_with('k') {
+        let val = q[..q.len() - 1].parse::<u64>().unwrap_or(0);
+        (val / (1024 * 1024)) as u32
+    } else if q.ends_with('M') {
+        q[..q.len() - 1].parse::<u32>().unwrap_or(0)
+    } else if q.ends_with('G') {
+        let val = q[..q.len() - 1].parse::<u32>().unwrap_or(0);
+        val * 1000
+    } else {
+        let val = q.parse::<u64>().unwrap_or(0);
+        (val / (1024 * 1024)) as u32
+    }
 }
