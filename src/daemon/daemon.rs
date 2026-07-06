@@ -10,7 +10,7 @@ use futures::StreamExt;
 use futures::io::AsyncBufReadExt;
 
 use crate::data::{
-    ResourceKind, ResourceRow, ClusterInfo, NamespaceInfo, PodInfo, PodPhase, Severity, Provider,
+    ResourceKind, ResourceRow, ClusterInfo, NamespaceInfo, PodInfo, PodPhase, Provider,
     pod_row, deployment_row, replicaset_row, statefulset_row, service_row, ingress_row,
     node_row, namespace_row, configmap_row, secret_row, event_row, pvc_row
 };
@@ -141,10 +141,6 @@ impl Daemon {
         (cpu, mem)
     }
 
-    pub fn active_context(&self) -> String {
-        let inner = self.inner.lock().unwrap();
-        inner.active_context.clone()
-    }
 
     pub fn select_cluster(&self, idx: usize) {
         let mut inner = self.inner.lock().unwrap();

@@ -256,6 +256,7 @@ pub struct ClusterInfo {
     pub node_count: usize,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct NamespaceInfo {
     pub name: String,
@@ -298,6 +299,7 @@ impl PodPhase {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PodInfo {
     pub name: String,
@@ -314,166 +316,6 @@ pub struct PodInfo {
     pub age_secs: u64,
 }
 
-#[derive(Debug, Clone)]
-pub struct DeploymentInfo {
-    pub name: String,
-    pub namespace: String,
-    pub ready: (u32, u32),
-    pub up_to_date: u32,
-    pub available: u32,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ReplicaSetInfo {
-    pub name: String,
-    pub namespace: String,
-    pub owner_deployment: String,
-    pub desired: u32,
-    pub current: u32,
-    pub ready: u32,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct StatefulSetInfo {
-    pub name: String,
-    pub namespace: String,
-    pub ready: (u32, u32),
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ServiceType {
-    ClusterIP,
-    NodePort,
-    LoadBalancer,
-}
-
-impl ServiceType {
-    pub fn label(self) -> &'static str {
-        match self {
-            ServiceType::ClusterIP => "ClusterIP",
-            ServiceType::NodePort => "NodePort",
-            ServiceType::LoadBalancer => "LoadBalancer",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ServiceInfo {
-    pub name: String,
-    pub namespace: String,
-    pub svc_type: ServiceType,
-    pub cluster_ip: String,
-    pub external_ip: String,
-    pub ports: String,
-    pub selector: String,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct IngressInfo {
-    pub name: String,
-    pub namespace: String,
-    pub class: String,
-    pub hosts: String,
-    pub address: String,
-    pub ports: String,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeStatus {
-    Ready,
-    NotReady,
-}
-
-impl NodeStatus {
-    pub fn label(self) -> &'static str {
-        match self {
-            NodeStatus::Ready => "Ready",
-            NodeStatus::NotReady => "NotReady",
-        }
-    }
-    pub fn severity(self) -> Severity {
-        match self {
-            NodeStatus::Ready => Severity::Good,
-            NodeStatus::NotReady => Severity::Bad,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NodeInfo {
-    pub name: String,
-    pub status: NodeStatus,
-    pub roles: String,
-    pub version: String,
-    pub cpu_pct: u8,
-    pub mem_pct: u8,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ConfigMapInfo {
-    pub name: String,
-    pub namespace: String,
-    pub data_count: u32,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct SecretInfo {
-    pub name: String,
-    pub namespace: String,
-    pub secret_type: String,
-    pub data_count: u32,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventType {
-    Normal,
-    Warning,
-}
-
-impl EventType {
-    pub fn label(self) -> &'static str {
-        match self {
-            EventType::Normal => "Normal",
-            EventType::Warning => "Warning",
-        }
-    }
-    pub fn severity(self) -> Severity {
-        match self {
-            EventType::Normal => Severity::Neutral,
-            EventType::Warning => Severity::Warn,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct EventInfo {
-    pub namespace: String,
-    pub event_type: EventType,
-    pub reason: String,
-    pub object: String,
-    pub message: String,
-    pub count: u32,
-    pub age_secs: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct PvcInfo {
-    pub name: String,
-    pub namespace: String,
-    pub status: &'static str,
-    pub volume: String,
-    pub capacity: String,
-    pub storage_class: String,
-    pub age_secs: u64,
-}
 
 #[derive(Debug, Clone)]
 pub struct ResourceRow {

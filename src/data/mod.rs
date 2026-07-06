@@ -2,7 +2,7 @@ mod model;
 
 pub use model::*;
 
-use k8s_openapi::api::core::v1::{Pod, Service, Node, Namespace, ConfigMap, Secret, Event, PersistentVolumeClaim};
+use k8s_openapi::api::core::v1::{Service, Node, Namespace, ConfigMap, Secret, Event, PersistentVolumeClaim};
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::networking::v1::Ingress;
 

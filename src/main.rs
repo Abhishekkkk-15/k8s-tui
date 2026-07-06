@@ -4,7 +4,6 @@ mod data;
 mod theme;
 mod ui;
 use std::io::{self, Stdout};
-use std::thread;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyEventKind};
