@@ -380,8 +380,8 @@ impl App {
                 self.start_create()
             }
             KeyCode::Char('n') => self.cycle_namespace(),
-            KeyCode::Char('[') => self.cycle_kind(-1),
-            KeyCode::Char(']') => self.cycle_kind(1),
+            KeyCode::Char('[') | KeyCode::BackTab => self.cycle_kind(-1),
+            KeyCode::Char(']') | KeyCode::Tab => self.cycle_kind(1),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.start_delete_confirm()
             }
