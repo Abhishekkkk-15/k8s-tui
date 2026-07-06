@@ -91,35 +91,35 @@ update roughly every couple seconds without input lag.
 
 ## Milestone 2 — Generalize the pattern to other resource kinds
 
-- [ ] Repeat Steps 1-2 pattern for `Deployments` (own cache field or a
+- [x] Repeat Steps 1-2 pattern for `Deployments` (own cache field or a
   small `HashMap<ResourceKind, Vec<ResourceRow>>` cache — decide once you've
   done Pods and see if per-kind fields feel repetitive).
-- [ ] Same for `Services`, `Namespaces`, `Nodes`, `ConfigMaps`, `Secrets`,
+- [x] Same for `Services`, `Namespaces`, `Nodes`, `ConfigMaps`, `Secrets`,
   `Pvcs`, `Events`, `ReplicaSets`, `StatefulSets`, `Ingresses` — whichever
   order is useful to you; Namespaces/Nodes are good next picks since the
   cluster picker view already depends on real namespace names for
   `cycle_namespace()` in `app.rs`.
-- [ ] Once every kind has a real source, decide whether `MockBackend` is
+- [x] Once every kind has a real source, decide whether `MockBackend` is
   still needed as a fallback/demo mode, or can be deleted.
 
 ## Milestone 3 — Wire mutations to the real cluster
 
-- [ ] `start_create` / `on_key_create` (`app.rs`) currently calls
+- [x] `start_create` / `on_key_create` (`app.rs`) currently calls
   `self.backend.create_default(...)` — replace with real `Api::create`
   calls per kind (only for kinds where `ResourceKind::creatable()` is true).
-- [ ] `start_delete_confirm` / `on_key_confirm_delete` — replace
+- [x] `start_delete_confirm` / `on_key_confirm_delete` — replace
   `self.backend.delete(...)` with real `Api::delete`.
-- [ ] `start_edit` / `on_key_edit` — replace `self.backend.apply_edit(...)`
+- [x] `start_edit` / `on_key_edit` — replace `self.backend.apply_edit(...)`
   and `current_edit_value(...)` with real `Api::patch`/read of the live
   object (only for kinds where `ResourceKind::editable()` is true).
-- [ ] These are all async kube calls triggered by a keypress, not a poll
+- [x] These are all async kube calls triggered by a keypress, not a poll
   loop — decide whether to block briefly (single mutation, user is already
   waiting) or spawn + surface a "pending" status message and reconcile via
   the next cache refresh.
 
 ## Milestone 4 — Cleanup
 
-- [ ] Remove `MockBackend` and mock-only fields on `App` once nothing calls
+- [x] Remove `MockBackend` and mock-only fields on `App` once nothing calls
   into it.
-- [ ] Reconsider polling vs. `kube::runtime::watcher` (push-based updates
+- [x] Reconsider polling vs. `kube::runtime::watcher` (push-based updates
   instead of a fixed-interval list loop) if polling feels laggy or wasteful.
