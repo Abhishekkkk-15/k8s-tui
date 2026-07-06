@@ -1,8 +1,8 @@
 //! Generates believable multi-cluster mock data and jitters it over time so
 //! the TUI feels alive without ever talking to a real cluster.
 
-use rand::seq::SliceRandom;
 use rand::Rng;
+use rand::seq::SliceRandom;
 
 use super::model::*;
 
@@ -30,17 +30,94 @@ struct AppSpec {
 }
 
 const APPS: &[AppSpec] = &[
-    AppSpec { name: "frontend", namespace: "default", replicas: 3, image: "web:1.4", kind: WorkloadKind::Deployment, port: Some(80) },
-    AppSpec { name: "api-gateway", namespace: "default", replicas: 2, image: "gateway:2.1", kind: WorkloadKind::Deployment, port: Some(8080) },
-    AppSpec { name: "auth-service", namespace: "default", replicas: 2, image: "auth:1.0", kind: WorkloadKind::Deployment, port: Some(9000) },
-    AppSpec { name: "payment-service", namespace: "default", replicas: 2, image: "payment:3.2", kind: WorkloadKind::Deployment, port: Some(9100) },
-    AppSpec { name: "notification-worker", namespace: "default", replicas: 2, image: "worker:1.1", kind: WorkloadKind::Deployment, port: None },
-    AppSpec { name: "redis", namespace: "default", replicas: 1, image: "redis:7", kind: WorkloadKind::StatefulSet, port: Some(6379) },
-    AppSpec { name: "postgres", namespace: "default", replicas: 1, image: "postgres:16", kind: WorkloadKind::StatefulSet, port: Some(5432) },
-    AppSpec { name: "prometheus-server", namespace: "monitoring", replicas: 1, image: "prometheus:2.51", kind: WorkloadKind::Deployment, port: Some(9090) },
-    AppSpec { name: "grafana", namespace: "monitoring", replicas: 1, image: "grafana:10.4", kind: WorkloadKind::Deployment, port: Some(3000) },
-    AppSpec { name: "alertmanager", namespace: "monitoring", replicas: 1, image: "alertmanager:0.27", kind: WorkloadKind::Deployment, port: Some(9093) },
-    AppSpec { name: "ingress-nginx-controller", namespace: "ingress-nginx", replicas: 1, image: "ingress-nginx:1.10", kind: WorkloadKind::Deployment, port: Some(443) },
+    AppSpec {
+        name: "frontend",
+        namespace: "default",
+        replicas: 3,
+        image: "web:1.4",
+        kind: WorkloadKind::Deployment,
+        port: Some(80),
+    },
+    AppSpec {
+        name: "api-gateway",
+        namespace: "default",
+        replicas: 2,
+        image: "gateway:2.1",
+        kind: WorkloadKind::Deployment,
+        port: Some(8080),
+    },
+    AppSpec {
+        name: "auth-service",
+        namespace: "default",
+        replicas: 2,
+        image: "auth:1.0",
+        kind: WorkloadKind::Deployment,
+        port: Some(9000),
+    },
+    AppSpec {
+        name: "payment-service",
+        namespace: "default",
+        replicas: 2,
+        image: "payment:3.2",
+        kind: WorkloadKind::Deployment,
+        port: Some(9100),
+    },
+    AppSpec {
+        name: "notification-worker",
+        namespace: "default",
+        replicas: 2,
+        image: "worker:1.1",
+        kind: WorkloadKind::Deployment,
+        port: None,
+    },
+    AppSpec {
+        name: "redis",
+        namespace: "default",
+        replicas: 1,
+        image: "redis:7",
+        kind: WorkloadKind::StatefulSet,
+        port: Some(6379),
+    },
+    AppSpec {
+        name: "postgres",
+        namespace: "default",
+        replicas: 1,
+        image: "postgres:16",
+        kind: WorkloadKind::StatefulSet,
+        port: Some(5432),
+    },
+    AppSpec {
+        name: "prometheus-server",
+        namespace: "monitoring",
+        replicas: 1,
+        image: "prometheus:2.51",
+        kind: WorkloadKind::Deployment,
+        port: Some(9090),
+    },
+    AppSpec {
+        name: "grafana",
+        namespace: "monitoring",
+        replicas: 1,
+        image: "grafana:10.4",
+        kind: WorkloadKind::Deployment,
+        port: Some(3000),
+    },
+    AppSpec {
+        name: "alertmanager",
+        namespace: "monitoring",
+        replicas: 1,
+        image: "alertmanager:0.27",
+        kind: WorkloadKind::Deployment,
+        port: Some(9093),
+    },
+    AppSpec {
+        name: "ingress-nginx-controller",
+        namespace: "ingress-nginx",
+        replicas: 1,
+        image: "ingress-nginx:1.10",
+        kind: WorkloadKind::Deployment,
+        port: Some(443),
+    },
 ];
 
 const NAMESPACES: &[&str] = &[
@@ -89,7 +166,13 @@ impl MockBackend {
         let specs: [(&str, &str, Provider, usize, &str); 3] = [
             ("minikube", "minikube", Provider::Minikube, 1, "v1.31.0"),
             ("kind-dev", "kind-kind-dev", Provider::Kind, 2, "v1.30.2"),
-            ("kind-staging", "kind-kind-staging", Provider::Kind, 4, "v1.30.2"),
+            (
+                "kind-staging",
+                "kind-kind-staging",
+                Provider::Kind,
+                4,
+                "v1.30.2",
+            ),
         ];
 
         let mut clusters = Vec::new();
@@ -260,27 +343,15 @@ impl MockBackend {
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
-                    .map(|p| ResourceRow {
-                        namespace: Some(p.namespace.clone()),
-                        name: p.name.clone(),
-                        cells: vec![
-                            p.namespace.clone(),
-                            p.name.clone(),
-                            format!("{}/{}", p.ready.0, p.ready.1),
-                            p.phase.label().to_string(),
-                            p.restarts.to_string(),
-                            format!("{}m", p.cpu_millicores),
-                            format!("{}Mi", p.mem_mib),
-                            p.node.clone(),
-                            format_age(p.age_secs),
-                        ],
-                        status_col: Some(3),
-                        severity: p.phase.severity(),
-                    })
+                    .map(|p| super::pod_row(p))
                     .collect()
             }
             ResourceKind::Deployments => {
-                let mut items: Vec<_> = d.deployments.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .deployments
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -301,7 +372,11 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::ReplicaSets => {
-                let mut items: Vec<_> = d.replicasets.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .replicasets
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -322,7 +397,11 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::StatefulSets => {
-                let mut items: Vec<_> = d.statefulsets.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .statefulsets
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -341,7 +420,11 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::Services => {
-                let mut items: Vec<_> = d.services.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .services
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -363,7 +446,11 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::Ingresses => {
-                let mut items: Vec<_> = d.ingresses.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .ingresses
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -421,7 +508,11 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::ConfigMaps => {
-                let mut items: Vec<_> = d.configmaps.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> = d
+                    .configmaps
+                    .iter()
+                    .filter(|x| keep_ns(&x.namespace))
+                    .collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -440,7 +531,8 @@ impl MockBackend {
                     .collect()
             }
             ResourceKind::Secrets => {
-                let mut items: Vec<_> = d.secrets.iter().filter(|x| keep_ns(&x.namespace)).collect();
+                let mut items: Vec<_> =
+                    d.secrets.iter().filter(|x| keep_ns(&x.namespace)).collect();
                 items.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
                 items
                     .into_iter()
@@ -568,7 +660,10 @@ impl MockBackend {
             }
             ResourceKind::Deployments => {
                 let ns = namespace.unwrap();
-                if d.deployments.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.deployments
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("deployment '{name}' already exists in {ns}"));
                 }
                 let rs_name = format!("{}-{}", name, hash(&mut rng, 10));
@@ -606,7 +701,10 @@ impl MockBackend {
             }
             ResourceKind::StatefulSets => {
                 let ns = namespace.unwrap();
-                if d.statefulsets.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.statefulsets
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("statefulset '{name}' already exists in {ns}"));
                 }
                 d.statefulsets.push(StatefulSetInfo {
@@ -641,7 +739,10 @@ impl MockBackend {
             }
             ResourceKind::Services => {
                 let ns = namespace.unwrap();
-                if d.services.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.services
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("service '{name}' already exists in {ns}"));
                 }
                 d.services.push(ServiceInfo {
@@ -657,7 +758,10 @@ impl MockBackend {
             }
             ResourceKind::Ingresses => {
                 let ns = namespace.unwrap();
-                if d.ingresses.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.ingresses
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("ingress '{name}' already exists in {ns}"));
                 }
                 d.ingresses.push(IngressInfo {
@@ -672,7 +776,10 @@ impl MockBackend {
             }
             ResourceKind::ConfigMaps => {
                 let ns = namespace.unwrap();
-                if d.configmaps.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.configmaps
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("configmap '{name}' already exists in {ns}"));
                 }
                 d.configmaps.push(ConfigMapInfo {
@@ -684,7 +791,10 @@ impl MockBackend {
             }
             ResourceKind::Secrets => {
                 let ns = namespace.unwrap();
-                if d.secrets.iter().any(|x| x.namespace == ns && x.name == name) {
+                if d.secrets
+                    .iter()
+                    .any(|x| x.namespace == ns && x.name == name)
+                {
                     return Err(format!("secret '{name}' already exists in {ns}"));
                 }
                 d.secrets.push(SecretInfo {
@@ -719,38 +829,49 @@ impl MockBackend {
 
     /// Removes a resource from the mock cluster. Works for any kind so the
     /// UI can offer a consistent "delete selected row" action everywhere.
-    pub fn delete(&mut self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> Result<(), String> {
+    pub fn delete(
+        &mut self,
+        kind: ResourceKind,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> Result<(), String> {
         let d = &mut self.data[self.active];
         let ns_match = |ns: &str| namespace.map(|n| n == ns).unwrap_or(true);
         let found = match kind {
             ResourceKind::Pods => {
                 let before = d.pods.len();
-                d.pods.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.pods
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.pods.len() != before
             }
             ResourceKind::Deployments => {
                 let before = d.deployments.len();
-                d.deployments.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.deployments
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.deployments.len() != before
             }
             ResourceKind::ReplicaSets => {
                 let before = d.replicasets.len();
-                d.replicasets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.replicasets
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.replicasets.len() != before
             }
             ResourceKind::StatefulSets => {
                 let before = d.statefulsets.len();
-                d.statefulsets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.statefulsets
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.statefulsets.len() != before
             }
             ResourceKind::Services => {
                 let before = d.services.len();
-                d.services.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.services
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.services.len() != before
             }
             ResourceKind::Ingresses => {
                 let before = d.ingresses.len();
-                d.ingresses.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.ingresses
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.ingresses.len() != before
             }
             ResourceKind::Nodes => {
@@ -765,22 +886,26 @@ impl MockBackend {
             }
             ResourceKind::ConfigMaps => {
                 let before = d.configmaps.len();
-                d.configmaps.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.configmaps
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.configmaps.len() != before
             }
             ResourceKind::Secrets => {
                 let before = d.secrets.len();
-                d.secrets.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.secrets
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.secrets.len() != before
             }
             ResourceKind::Events => {
                 let before = d.events.len();
-                d.events.retain(|x| !(ns_match(&x.namespace) && x.object == name));
+                d.events
+                    .retain(|x| !(ns_match(&x.namespace) && x.object == name));
                 d.events.len() != before
             }
             ResourceKind::Pvcs => {
                 let before = d.pvcs.len();
-                d.pvcs.retain(|x| !(ns_match(&x.namespace) && x.name == name));
+                d.pvcs
+                    .retain(|x| !(ns_match(&x.namespace) && x.name == name));
                 d.pvcs.len() != before
             }
         };
@@ -793,7 +918,12 @@ impl MockBackend {
 
     /// Current value of the single field `ResourceKind::editable()` exposes
     /// for quick-editing, used to prefill the edit prompt.
-    pub fn current_edit_value(&self, kind: ResourceKind, namespace: Option<&str>, name: &str) -> Option<String> {
+    pub fn current_edit_value(
+        &self,
+        kind: ResourceKind,
+        namespace: Option<&str>,
+        name: &str,
+    ) -> Option<String> {
         let d = self.cur();
         match kind {
             ResourceKind::Deployments => d
@@ -875,7 +1005,9 @@ impl MockBackend {
             }
             ResourceKind::ConfigMaps => {
                 let ns = namespace.ok_or("namespace required")?;
-                let count: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+                let count: u32 = value
+                    .parse()
+                    .map_err(|_| format!("'{value}' is not a whole number"))?;
                 let d = &mut self.data[self.active];
                 let cm = d
                     .configmaps
@@ -887,7 +1019,9 @@ impl MockBackend {
             }
             ResourceKind::Secrets => {
                 let ns = namespace.ok_or("namespace required")?;
-                let count: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+                let count: u32 = value
+                    .parse()
+                    .map_err(|_| format!("'{value}' is not a whole number"))?;
                 let d = &mut self.data[self.active];
                 let secret = d
                     .secrets
@@ -912,9 +1046,16 @@ impl MockBackend {
         }
     }
 
-    fn scale_deployment(&mut self, namespace: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+    fn scale_deployment(
+        &mut self,
+        namespace: Option<&str>,
+        name: &str,
+        value: &str,
+    ) -> Result<(), String> {
         let ns = namespace.ok_or("namespace required")?.to_string();
-        let new_replicas: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+        let new_replicas: u32 = value
+            .parse()
+            .map_err(|_| format!("'{value}' is not a whole number"))?;
         if new_replicas > 50 {
             return Err("replica count too large (max 50)".to_string());
         }
@@ -987,9 +1128,16 @@ impl MockBackend {
         Ok(())
     }
 
-    fn scale_statefulset(&mut self, namespace: Option<&str>, name: &str, value: &str) -> Result<(), String> {
+    fn scale_statefulset(
+        &mut self,
+        namespace: Option<&str>,
+        name: &str,
+        value: &str,
+    ) -> Result<(), String> {
         let ns = namespace.ok_or("namespace required")?.to_string();
-        let new_replicas: u32 = value.parse().map_err(|_| format!("'{value}' is not a whole number"))?;
+        let new_replicas: u32 = value
+            .parse()
+            .map_err(|_| format!("'{value}' is not a whole number"))?;
         if new_replicas > 50 {
             return Err("replica count too large (max 50)".to_string());
         }
@@ -1235,11 +1383,7 @@ const LOG_TEMPLATES: &[&str] = &[
 ];
 
 fn sev(good: bool) -> Severity {
-    if good {
-        Severity::Good
-    } else {
-        Severity::Warn
-    }
+    if good { Severity::Good } else { Severity::Warn }
 }
 
 fn jitter_pct(rng: &mut impl Rng, v: &mut u8) {
@@ -1258,12 +1402,28 @@ fn jitter_u32(rng: &mut impl Rng, v: &mut u32, step: u32, min: u32, max: u32) {
 
 fn random_event_template(rng: &mut impl Rng, pod_name: &str) -> (&'static str, String, EventType) {
     let templates: &[(&str, &str, EventType)] = &[
-        ("Pulled", "Container image already present on machine", EventType::Normal),
+        (
+            "Pulled",
+            "Container image already present on machine",
+            EventType::Normal,
+        ),
         ("Created", "Created container", EventType::Normal),
         ("Started", "Started container", EventType::Normal),
-        ("Scheduled", "Successfully assigned pod to node", EventType::Normal),
-        ("BackOff", "Back-off restarting failed container", EventType::Warning),
-        ("Unhealthy", "Readiness probe failed: HTTP probe failed with statuscode: 503", EventType::Warning),
+        (
+            "Scheduled",
+            "Successfully assigned pod to node",
+            EventType::Normal,
+        ),
+        (
+            "BackOff",
+            "Back-off restarting failed container",
+            EventType::Warning,
+        ),
+        (
+            "Unhealthy",
+            "Readiness probe failed: HTTP probe failed with statuscode: 503",
+            EventType::Warning,
+        ),
     ];
     let (reason, msg, ty) = templates[rng.gen_range(0..templates.len())];
     (reason, format!("{} ({})", msg, pod_name), ty)
@@ -1297,7 +1457,11 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
         let not_ready = provider == Provider::Kind && node_count > 2 && i == node_count - 1;
         d.nodes.push(NodeInfo {
             name: format!("{}-worker{}", cluster_slug(provider), i),
-            status: if not_ready { NodeStatus::NotReady } else { NodeStatus::Ready },
+            status: if not_ready {
+                NodeStatus::NotReady
+            } else {
+                NodeStatus::Ready
+            },
             roles: "<none>".to_string(),
             version: "v1.30.2".to_string(),
             cpu_pct: if not_ready { 0 } else { rng.gen_range(10..70) },
@@ -1324,7 +1488,10 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
     }
 
     // kube-system control plane / system pods.
-    let ready_node = ready_nodes.first().cloned().unwrap_or(control_plane_name.clone());
+    let ready_node = ready_nodes
+        .first()
+        .cloned()
+        .unwrap_or(control_plane_name.clone());
     let system_pods: &[(&str, u32)] = &[
         ("etcd", 1),
         ("kube-apiserver", 1),
@@ -1379,7 +1546,10 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
             restarts: 0,
             cpu_millicores: rng.gen_range(5..30),
             mem_mib: rng.gen_range(20..60),
-            node: ready_nodes.choose(rng).cloned().unwrap_or(ready_node.clone()),
+            node: ready_nodes
+                .choose(rng)
+                .cloned()
+                .unwrap_or(ready_node.clone()),
             ip: fake_ip(rng),
             containers: vec!["coredns".to_string()],
             owner: "Deployment/coredns".to_string(),
@@ -1433,8 +1603,18 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
                     } else {
                         PodPhase::Running
                     };
-                    let ready = if phase == PodPhase::Running { (1, 1) } else { (0, 1) };
-                    let restarts = if is_crash { rng.gen_range(15..60) } else if rng.gen_bool(0.1) { rng.gen_range(1..4) } else { 0 };
+                    let ready = if phase == PodPhase::Running {
+                        (1, 1)
+                    } else {
+                        (0, 1)
+                    };
+                    let restarts = if is_crash {
+                        rng.gen_range(15..60)
+                    } else if rng.gen_bool(0.1) {
+                        rng.gen_range(1..4)
+                    } else {
+                        0
+                    };
 
                     d.pods.push(PodInfo {
                         name: format!("{}-{}", rs_name, hash(rng, 5)),
@@ -1444,7 +1624,10 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
                         restarts,
                         cpu_millicores: rng.gen_range(5..300),
                         mem_mib: rng.gen_range(32..600),
-                        node: ready_nodes.choose(rng).cloned().unwrap_or(ready_node.clone()),
+                        node: ready_nodes
+                            .choose(rng)
+                            .cloned()
+                            .unwrap_or(ready_node.clone()),
                         ip: fake_ip(rng),
                         containers: vec![spec.name.to_string()],
                         owner: format!("ReplicaSet/{}", rs_name),
@@ -1474,10 +1657,17 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
                         namespace: spec.namespace.to_string(),
                         ready: (1, 1),
                         phase: PodPhase::Running,
-                        restarts: if rng.gen_bool(0.1) { rng.gen_range(1..3) } else { 0 },
+                        restarts: if rng.gen_bool(0.1) {
+                            rng.gen_range(1..3)
+                        } else {
+                            0
+                        },
                         cpu_millicores: rng.gen_range(20..250),
                         mem_mib: rng.gen_range(64..700),
-                        node: ready_nodes.choose(rng).cloned().unwrap_or(ready_node.clone()),
+                        node: ready_nodes
+                            .choose(rng)
+                            .cloned()
+                            .unwrap_or(ready_node.clone()),
                         ip: fake_ip(rng),
                         containers: vec![spec.name.to_string()],
                         owner: format!("StatefulSet/{}", spec.name),
@@ -1489,7 +1679,11 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
                     namespace: spec.namespace.to_string(),
                     status: "Bound",
                     volume: format!("pvc-{}", hash(rng, 12)),
-                    capacity: if spec.name == "postgres" { "10Gi".to_string() } else { "5Gi".to_string() },
+                    capacity: if spec.name == "postgres" {
+                        "10Gi".to_string()
+                    } else {
+                        "5Gi".to_string()
+                    },
                     storage_class: "standard".to_string(),
                     age_secs: deploy_age,
                 });
@@ -1617,7 +1811,11 @@ fn build_cluster_data(rng: &mut impl Rng, provider: Provider, node_count: usize)
             age_secs: rng.gen_range(0..3600),
         });
     }
-    if let Some(crash_pod) = d.pods.iter().find(|p| p.phase == PodPhase::CrashLoopBackOff) {
+    if let Some(crash_pod) = d
+        .pods
+        .iter()
+        .find(|p| p.phase == PodPhase::CrashLoopBackOff)
+    {
         d.events.push(EventInfo {
             namespace: crash_pod.namespace.clone(),
             event_type: EventType::Warning,

@@ -22,7 +22,7 @@ each step is small and should compile before you move to the next.
 
 ## Milestone 1 — Real Pods, end to end
 
-- [ ] **Step 1: Add a pod cache to `Daemon`**
+- [x] **Step 1: Add a pod cache to `Daemon`**
   File: `src/daemon/daemon.rs`
   - Add `pods_cache: Arc<Mutex<Vec<PodInfo>>>` field to `Daemon`.
   - `#[derive(Clone)]` on `Daemon` (both `Client` and `Arc` are cheap to clone).
@@ -31,7 +31,7 @@ each step is small and should compile before you move to the next.
   - *Why*: shared, thread-safe storage the background task writes to and the
     UI reads from without blocking on either side.
 
-- [ ] **Step 2: Write an async fetch-and-convert function**
+- [x] **Step 2: Write an async fetch-and-convert function**
   File: `src/daemon/daemon.rs`
   - Add `async fn fetch_pods(&self) -> Result<Vec<PodInfo>, ...>` that:
     - Lists pods across all namespaces (`Api::all(self.client.clone())`, not
@@ -44,7 +44,7 @@ each step is small and should compile before you move to the next.
     app's own model — keep it isolated here so nothing else needs to know
     about `k8s_openapi` types.
 
-- [ ] **Step 3: Spawn a background polling task**
+- [x] **Step 3: Spawn a background polling task**
   File: `src/main.rs`
   - After `Daemon::new()` succeeds and before `run(...)`, `tokio::spawn` a
     loop: call `fetch_pods()`, lock `pods_cache` and replace its contents,
@@ -55,14 +55,14 @@ each step is small and should compile before you move to the next.
   - *Why*: this is what keeps the cache warm without the UI thread ever
     calling into kube-rs directly.
 
-- [ ] **Step 4: Add a synchronous cache getter**
+- [x] **Step 4: Add a synchronous cache getter**
   File: `src/daemon/daemon.rs`
   - Add `fn pods(&self) -> Vec<PodInfo>` (no `async`) that locks
     `pods_cache` and returns a clone of the `Vec`.
   - *Why*: this is the only method the UI thread is allowed to call — it's
     fast (just a mutex lock + clone) and never touches the network.
 
-- [ ] **Step 5: Extract a shared `PodInfo -> ResourceRow` mapping**
+- [x] **Step 5: Extract a shared `PodInfo -> ResourceRow` mapping**
   File: `src/data/mock.rs` (move logic out) — new home can be a free fn in
   `src/data/mod.rs` or alongside `ResourceRow`, e.g. `pub fn pod_row(p: &PodInfo) -> ResourceRow`.
   - `MockBackend::rows()` already builds `ResourceRow`s for pods inline
@@ -72,7 +72,7 @@ each step is small and should compile before you move to the next.
   - *Why*: avoids two copies of the same cell-formatting logic drifting
     apart later.
 
-- [ ] **Step 6: Wire real pods into `App::visible_rows`**
+- [x] **Step 6: Wire real pods into `App::visible_rows`**
   File: `src/app.rs` (~line 127)
   - In `visible_rows()`, branch: if `kind == ResourceKind::Pods`, build rows
     from `self.daemon.pods()` (mapped via the Step 5 function) instead of

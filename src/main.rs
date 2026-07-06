@@ -4,6 +4,7 @@ mod data;
 mod theme;
 mod ui;
 use std::io::{self, Stdout};
+use std::thread;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyEventKind};
@@ -21,7 +22,22 @@ use crate::daemon::daemon::Daemon;
 async fn main() -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let k8s_client = Daemon::new().await.unwrap();
+    let daemon_bg = k8s_client.clone();
+    tokio::spawn(async move {
+        loop {
+            match daemon_bg.fetch_pods().await {
+                Ok(pods) => {
+                    let mut cache = daemon_bg.pod_cache.lock().unwrap();
 
+                    *cache = pods;
+                }
+                Err(e) => {
+                    eprintln!("failed to fetch pods: {e}");
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
     let result = run(&mut terminal, k8s_client);
     restore_terminal(&mut terminal)?;
     if let Err(err) = &result {

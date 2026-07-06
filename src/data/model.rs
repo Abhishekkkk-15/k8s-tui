@@ -133,32 +133,67 @@ impl ResourceKind {
     pub fn columns(self) -> &'static [&'static str] {
         match self {
             ResourceKind::Pods => &[
-                "NAMESPACE", "NAME", "READY", "STATUS", "RESTARTS", "CPU", "MEM", "NODE", "AGE",
+                "NAMESPACE",
+                "NAME",
+                "READY",
+                "STATUS",
+                "RESTARTS",
+                "CPU",
+                "MEM",
+                "NODE",
+                "AGE",
             ],
-            ResourceKind::Deployments => {
-                &["NAMESPACE", "NAME", "READY", "UP-TO-DATE", "AVAILABLE", "AGE"]
-            }
+            ResourceKind::Deployments => &[
+                "NAMESPACE",
+                "NAME",
+                "READY",
+                "UP-TO-DATE",
+                "AVAILABLE",
+                "AGE",
+            ],
             ResourceKind::ReplicaSets => {
                 &["NAMESPACE", "NAME", "DESIRED", "CURRENT", "READY", "AGE"]
             }
             ResourceKind::StatefulSets => &["NAMESPACE", "NAME", "READY", "AGE"],
             ResourceKind::Services => &[
-                "NAMESPACE", "NAME", "TYPE", "CLUSTER-IP", "EXTERNAL-IP", "PORTS", "AGE",
+                "NAMESPACE",
+                "NAME",
+                "TYPE",
+                "CLUSTER-IP",
+                "EXTERNAL-IP",
+                "PORTS",
+                "AGE",
             ],
             ResourceKind::Ingresses => &[
-                "NAMESPACE", "NAME", "CLASS", "HOSTS", "ADDRESS", "PORTS", "AGE",
+                "NAMESPACE",
+                "NAME",
+                "CLASS",
+                "HOSTS",
+                "ADDRESS",
+                "PORTS",
+                "AGE",
             ],
-            ResourceKind::Nodes => &[
-                "NAME", "STATUS", "ROLES", "VERSION", "CPU", "MEM", "AGE",
-            ],
+            ResourceKind::Nodes => &["NAME", "STATUS", "ROLES", "VERSION", "CPU", "MEM", "AGE"],
             ResourceKind::Namespaces => &["NAME", "STATUS", "AGE"],
             ResourceKind::ConfigMaps => &["NAMESPACE", "NAME", "DATA", "AGE"],
             ResourceKind::Secrets => &["NAMESPACE", "NAME", "TYPE", "DATA", "AGE"],
             ResourceKind::Events => &[
-                "NAMESPACE", "TYPE", "REASON", "OBJECT", "MESSAGE", "COUNT", "AGE",
+                "NAMESPACE",
+                "TYPE",
+                "REASON",
+                "OBJECT",
+                "MESSAGE",
+                "COUNT",
+                "AGE",
             ],
             ResourceKind::Pvcs => &[
-                "NAMESPACE", "NAME", "STATUS", "VOLUME", "CAPACITY", "STORAGECLASS", "AGE",
+                "NAMESPACE",
+                "NAME",
+                "STATUS",
+                "VOLUME",
+                "CAPACITY",
+                "STORAGECLASS",
+                "AGE",
             ],
         }
     }

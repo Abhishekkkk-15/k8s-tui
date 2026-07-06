@@ -5,7 +5,7 @@ use ratatui::widgets::{ListState, TableState};
 
 use crate::{
     daemon::daemon::Daemon,
-    data::{MockBackend, ResourceKind, ResourceRow},
+    data::{MockBackend, ResourceKind, ResourceRow, pod_row},
 };
 
 const DATA_TICK: Duration = Duration::from_secs(2);
@@ -126,7 +126,16 @@ impl App {
 
     pub fn visible_rows(&self, kind: ResourceKind) -> Vec<ResourceRow> {
         let ns = self.namespace_filter.as_deref();
-        let mut rows = self.backend.rows(kind, ns);
+        let mut rows = if kind == ResourceKind::Pods {
+            let mut pods = self.daemon.pods();
+            if let Some(ns_filter) = ns {
+                pods.retain(|p| p.namespace == ns_filter);
+            }
+            pods.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
+            pods.iter().map(pod_row).collect()
+        } else {
+            self.backend.rows(kind, ns)
+        };
         if !self.filter.is_empty() {
             let needle = self.filter.to_ascii_lowercase();
             rows.retain(|r| {
