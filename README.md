@@ -1,1 +1,1 @@
-k8s-tui
+@k8s-tui
